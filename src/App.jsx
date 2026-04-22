@@ -1,5 +1,7 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
 import { RENDERERS_2D, inscribeNumbers } from './sigil2d.js'
+import { computeProfile, computeCompatibility, CORE_KEYS, CORE_LABELS } from './numerology.js'
+import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
 
 const Sigil3D = lazy(() => import('./Sigil3D.jsx'))
 
@@ -20,8 +22,14 @@ const PALETTES = {
 }
 
 const PATTERNS = ['mandala', 'interference', 'constellation', 'spiral']
-const DEEPENABLE = ['narrative', 'math', 'numerology', 'history', 'pattern']
 const MAX_DEPTH = 3
+
+// Which sections are deepenable per reading mode
+const DEEPEN_SECTIONS = {
+  numbers: ['narrative', 'math', 'numerology', 'history', 'pattern'],
+  profile: ['narrative', ...CORE_KEYS],
+  compatibility: ['narrative', 'lifePath', 'expression', 'soulUrge', 'strengths', 'tensions', 'practice']
+}
 
 // ───────────────────────────────────────────────────────────────────────
 // Utility
@@ -48,35 +56,26 @@ const formatDate = () => {
 // API calls
 // ───────────────────────────────────────────────────────────────────────
 
-const callOracle = async (numbers) => {
-  const res = await fetch('/api/oracle', {
+const postJSON = async (url, body) => {
+  const res = await fetch(url, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ numbers })
+    body: JSON.stringify(body)
   })
   if (!res.ok) {
     let detail = ''
-    try { const body = await res.json(); detail = body?.error || body?.detail || '' }
+    try { const b = await res.json(); detail = b?.error || b?.detail || '' }
     catch { detail = await res.text() }
     throw new Error(detail ? `${res.status}: ${detail}` : `Request failed (${res.status})`)
   }
   return res.json()
 }
 
-const callDeepen = async ({ numbers, section, previousLayers, reading }) => {
-  const res = await fetch('/api/deepen', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ numbers, section, previousLayers, reading })
-  })
-  if (!res.ok) {
-    let detail = ''
-    try { const body = await res.json(); detail = body?.error || body?.detail || '' }
-    catch { detail = await res.text() }
-    throw new Error(detail ? `${res.status}: ${detail}` : `Deepen failed (${res.status})`)
-  }
-  return res.json()
-}
+const callOracle = (numbers) => postJSON('/api/oracle', { numbers })
+const callProfile = (profile) => postJSON('/api/profile', { profile })
+const callCompatibility = (profileA, profileB, compatibility) =>
+  postJSON('/api/compatibility', { profileA, profileB, compatibility })
+const callDeepen = (payload) => postJSON('/api/deepen', payload)
 
 // ───────────────────────────────────────────────────────────────────────
 // SVG Sigil (header)
@@ -91,45 +90,37 @@ const HeaderSigil = () => (
       {Array.from({ length: 12 }).map((_, i) => {
         const a = (i / 12) * Math.PI * 2
         return (
-          <line
-            key={i}
-            x1={50 + Math.cos(a) * 20}
-            y1={50 + Math.sin(a) * 20}
-            x2={50 + Math.cos(a) * 46}
-            y2={50 + Math.sin(a) * 46}
-            opacity="0.35"
-          />
+          <line key={i}
+            x1={50 + Math.cos(a) * 20} y1={50 + Math.sin(a) * 20}
+            x2={50 + Math.cos(a) * 46} y2={50 + Math.sin(a) * 46}
+            opacity="0.35" />
         )
       })}
-      <polygon
+      <polygon opacity="0.7"
         points={Array.from({ length: 6 }).map((_, i) => {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 2
           return `${50 + Math.cos(a) * 28},${50 + Math.sin(a) * 28}`
-        }).join(' ')}
-        opacity="0.7"
-      />
-      <polygon
+        }).join(' ')} />
+      <polygon opacity="0.5"
         points={Array.from({ length: 6 }).map((_, i) => {
           const a = (i / 6) * Math.PI * 2 - Math.PI / 2 + Math.PI / 6
           return `${50 + Math.cos(a) * 28},${50 + Math.sin(a) * 28}`
-        }).join(' ')}
-        opacity="0.5"
-      />
+        }).join(' ')} />
       <circle cx="50" cy="50" r="3" fill="#c8a96e" stroke="none" />
     </g>
   </svg>
 )
 
 // ───────────────────────────────────────────────────────────────────────
-// DeepenBlock: reusable section with "go deeper" button
+// DeepenBlock
 // ───────────────────────────────────────────────────────────────────────
 
-const DeepenBlock = ({ section, baseText, className = 'card', label, layers = [], loading, error, onDeepen, variant }) => {
+const DeepenBlock = ({ section, baseText, className = 'card', label, sublabel, layers = [], loading, error, onDeepen, variant }) => {
   const depth = layers.length + 1
   const maxed = depth >= MAX_DEPTH + 1
   return (
     <div className={className}>
-      {label && <p className="card-title">{label}</p>}
+      {label && <p className="card-title">{label}{sublabel ? <span className="card-subtitle"> · {sublabel}</span> : null}</p>}
       <div className={variant === 'narrative' ? 'narrative' : 'card-body'}>
         <p>{baseText}</p>
         {layers.map((text, i) => (
@@ -143,11 +134,7 @@ const DeepenBlock = ({ section, baseText, className = 'card', label, layers = []
         {maxed ? (
           <span className="deepen-maxed">✦ deepest layer reached</span>
         ) : (
-          <button
-            className="deepen-btn"
-            onClick={() => onDeepen(section)}
-            disabled={loading}
-          >
+          <button className="deepen-btn" onClick={() => onDeepen(section)} disabled={loading}>
             {loading ? 'descending…' : 'go deeper ↓'}
           </button>
         )}
@@ -158,20 +145,66 @@ const DeepenBlock = ({ section, baseText, className = 'card', label, layers = []
 }
 
 // ───────────────────────────────────────────────────────────────────────
+// Compatibility meter
+// ───────────────────────────────────────────────────────────────────────
+
+const CompatibilityMeter = ({ score, axes }) => (
+  <div className="compat-meter">
+    <div className="compat-score">
+      <div className="compat-score-value">{score}</div>
+      <div className="compat-score-label">harmony</div>
+    </div>
+    <div className="compat-axes">
+      {axes.map((ax) => (
+        <div key={ax.key} className="compat-axis">
+          <div className="compat-axis-label">
+            <span>{ax.label}</span>
+            <span className="compat-axis-numbers">{ax.a} · {ax.b}</span>
+          </div>
+          <div className="compat-axis-bar">
+            <div className="compat-axis-fill" style={{ width: `${Math.round(ax.harmony * 100)}%` }} />
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+)
+
+// ───────────────────────────────────────────────────────────────────────
 // Main App
 // ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
+  // Input mode: 'numbers' | 'profile' | 'compatibility'
+  const [inputMode, setInputMode] = useState('numbers')
+
+  // Numbers mode state
   const [chips, setChips] = useState([])
   const [draft, setDraft] = useState('')
+
+  // Profile/Compat mode state
+  const [system, setSystem] = useState('pythagorean')
+  const [profileA, setProfileA] = useState({ name: '', birthdate: '' })
+  const [profileB, setProfileB] = useState({ name: '', birthdate: '' })
+
+  // Reading state (shape varies by mode — tagged by readingMode)
+  const [readingMode, setReadingMode] = useState(null) // what mode produced the current reading
   const [reading, setReading] = useState(null)
+  const [computedProfile, setComputedProfile] = useState(null) // for profile/compat
+  const [computedProfileB, setComputedProfileB] = useState(null)
+  const [computedCompat, setComputedCompat] = useState(null)
+
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // Visual state
   const [pattern, setPattern] = useState(null)
-  const [mode, setMode] = useState('2d') // '2d' | '3d'
-  const [deepenings, setDeepenings] = useState({}) // { section: [string, string, ...] }
-  const [deepenLoading, setDeepenLoading] = useState({}) // { section: bool }
-  const [deepenErrors, setDeepenErrors] = useState({}) // { section: msg }
+  const [viewMode, setViewMode] = useState('2d')
+
+  // Deepen state
+  const [deepenings, setDeepenings] = useState({})
+  const [deepenLoading, setDeepenLoading] = useState({})
+  const [deepenErrors, setDeepenErrors] = useState({})
 
   const inputRef = useRef(null)
   const canvasRef = useRef(null)
@@ -179,6 +212,29 @@ export default function App() {
   const rotationRef = useRef(0)
   const animRef = useRef(null)
 
+  // Live-computed profile previews for the input form
+  const previewA = useMemo(() => {
+    if (!profileA.name || !/^\d{4}-\d{2}-\d{2}$/.test(profileA.birthdate)) return null
+    try { return computeProfile({ name: profileA.name, birthdate: profileA.birthdate, system }) } catch { return null }
+  }, [profileA, system])
+  const previewB = useMemo(() => {
+    if (!profileB.name || !/^\d{4}-\d{2}-\d{2}$/.test(profileB.birthdate)) return null
+    try { return computeProfile({ name: profileB.name, birthdate: profileB.birthdate, system }) } catch { return null }
+  }, [profileB, system])
+  const previewCompat = useMemo(() => {
+    if (!previewA || !previewB) return null
+    return computeCompatibility(previewA, previewB)
+  }, [previewA, previewB])
+
+  // Numbers array used for the sigil, derived from whatever the active reading is
+  const sigilNumbers = useMemo(() => {
+    if (readingMode === 'numbers') return chips
+    if (readingMode === 'profile') return computedProfile?.vector || []
+    if (readingMode === 'compatibility') return computedCompat?.mergedVector || []
+    return []
+  }, [readingMode, chips, computedProfile, computedCompat])
+
+  // Input: numbers mode
   const addChip = (raw) => {
     const cleaned = raw.trim().replace(/[^0-9.\-]/g, '')
     if (!cleaned) return
@@ -186,31 +242,15 @@ export default function App() {
     if (!Number.isFinite(n)) return
     setChips((c) => [...c, n])
   }
-
   const onKey = (e) => {
     if (e.key === ' ' || e.key === 'Enter') {
       e.preventDefault()
-      if (draft.trim()) {
-        addChip(draft)
-        setDraft('')
-      } else if (e.key === 'Enter' && chips.length > 0 && !loading) {
-        receiveReading()
-      }
+      if (draft.trim()) { addChip(draft); setDraft('') }
+      else if (e.key === 'Enter' && chips.length > 0 && !loading) { receiveReading() }
     } else if (e.key === 'Backspace' && !draft && chips.length > 0) {
       setChips((c) => c.slice(0, -1))
     }
   }
-
-  const loadPreset = (nums) => {
-    setChips(nums)
-    setDraft('')
-    setReading(null)
-    setPattern(null)
-    setError(null)
-    setDeepenings({})
-    setDeepenErrors({})
-  }
-
   const presets = [
     { label: 'today', value: () => formatDate() },
     { label: '42', value: () => [42] },
@@ -218,19 +258,48 @@ export default function App() {
     { label: '137', value: () => [137] },
     { label: 'fibonacci', value: () => [1, 1, 2, 3, 5, 8] }
   ]
+  const loadPreset = (nums) => {
+    setChips(nums); setDraft('')
+    clearReading()
+  }
 
-  const receiveReading = async () => {
-    if (chips.length === 0) return
-    setLoading(true)
+  const clearReading = () => {
+    setReading(null); setReadingMode(null); setPattern(null)
+    setComputedProfile(null); setComputedProfileB(null); setComputedCompat(null)
     setError(null)
-    setReading(null)
-    setPattern(null)
-    setDeepenings({})
-    setDeepenErrors({})
+    setDeepenings({}); setDeepenErrors({}); setDeepenLoading({})
+  }
+
+  const reset = () => {
+    clearReading()
+    setChips([]); setDraft('')
+    setProfileA({ name: '', birthdate: '' })
+    setProfileB({ name: '', birthdate: '' })
+  }
+
+  // The one Receive button — dispatches by mode
+  const receiveReading = async () => {
+    setLoading(true); setError(null)
+    setReading(null); setPattern(null)
+    setDeepenings({}); setDeepenErrors({}); setDeepenLoading({})
     try {
-      const result = await callOracle(chips)
-      setReading(result)
-      setPattern('mandala')
+      if (inputMode === 'numbers') {
+        if (chips.length === 0) { setLoading(false); return }
+        const result = await callOracle(chips)
+        setReading(result); setReadingMode('numbers'); setPattern('mandala')
+      } else if (inputMode === 'profile') {
+        if (!previewA) throw new Error('Please enter a full name and birth date.')
+        const result = await callProfile(previewA)
+        setReading(result); setReadingMode('profile')
+        setComputedProfile(previewA); setPattern('mandala')
+      } else if (inputMode === 'compatibility') {
+        if (!previewA || !previewB) throw new Error('Both profiles need name + birth date.')
+        if (!previewCompat) throw new Error('Could not compute compatibility.')
+        const result = await callCompatibility(previewA, previewB, previewCompat)
+        setReading(result); setReadingMode('compatibility')
+        setComputedProfile(previewA); setComputedProfileB(previewB); setComputedCompat(previewCompat)
+        setPattern('mandala')
+      }
     } catch (e) {
       setError(e.message)
     } finally {
@@ -245,7 +314,13 @@ export default function App() {
     setDeepenLoading((s) => ({ ...s, [section]: true }))
     setDeepenErrors((s) => ({ ...s, [section]: null }))
     try {
-      const { text } = await callDeepen({ numbers: chips, section, previousLayers, reading })
+      let context = ''
+      if (readingMode === 'profile' && computedProfile) {
+        context = `Profile: ${computedProfile.inputs.name}, born ${computedProfile.inputs.birthdate} (${computedProfile.inputs.system}). Core numbers: LP ${computedProfile.lifePath.value}, Ex ${computedProfile.expression.value}, SU ${computedProfile.soulUrge.value}, Pe ${computedProfile.personality.value}, Bd ${computedProfile.birthday.value}, PY ${computedProfile.personalYear.value}.`
+      } else if (readingMode === 'compatibility' && computedProfile && computedProfileB) {
+        context = `Compatibility between ${computedProfile.inputs.name} (LP ${computedProfile.lifePath.value}, Ex ${computedProfile.expression.value}, SU ${computedProfile.soulUrge.value}) and ${computedProfileB.inputs.name} (LP ${computedProfileB.lifePath.value}, Ex ${computedProfileB.expression.value}, SU ${computedProfileB.soulUrge.value}). Score: ${computedCompat.score}/100.`
+      }
+      const { text } = await callDeepen({ numbers: sigilNumbers, section, previousLayers, reading, context })
       setDeepenings((s) => ({ ...s, [section]: [...previousLayers, text] }))
     } catch (e) {
       setDeepenErrors((s) => ({ ...s, [section]: e.message }))
@@ -254,47 +329,32 @@ export default function App() {
     }
   }
 
-  const reset = () => {
-    setChips([])
-    setDraft('')
-    setReading(null)
-    setPattern(null)
-    setError(null)
-    setDeepenings({})
-    setDeepenErrors({})
-  }
-
   const copyReading = () => {
     if (!reading) return
-    const section = (key) => {
+    const sectionText = (key) => {
+      const raw = reading[key]
+      const base = typeof raw === 'string' ? raw : raw?.meaning || raw?.text || ''
       const layers = deepenings[key] || []
-      return [reading[key], ...layers].join('\n\n')
+      return [base, ...layers].filter(Boolean).join('\n\n')
     }
-    const text = [
-      reading.archetype,
-      '',
-      section('narrative'),
-      '',
-      `— ${reading.affirmation}`,
-      '',
-      '── MATHEMATICS ──',
-      section('math'),
-      '',
-      '── NUMEROLOGY ──',
-      section('numerology'),
-      '',
-      '── HISTORY ──',
-      section('history'),
-      '',
-      '── PATTERN ──',
-      section('pattern')
-    ].join('\n')
-    navigator.clipboard.writeText(text)
+    const lines = [reading.archetype, '', sectionText('narrative')]
+    if (reading.affirmation) lines.push('', `— ${reading.affirmation}`)
+    if (reading.verdict) lines.push('', `— ${reading.verdict}`)
+    const sections = readingMode === 'numbers'
+      ? [['MATHEMATICS', 'math'], ['NUMEROLOGY', 'numerology'], ['HISTORY', 'history'], ['PATTERN', 'pattern']]
+      : readingMode === 'profile'
+      ? CORE_KEYS.map((k) => [CORE_LABELS[k].label.toUpperCase(), k])
+      : [['LIFE PATH', 'lifePath'], ['EXPRESSION', 'expression'], ['SOUL URGE', 'soulUrge'], ['STRENGTHS', 'strengths'], ['TENSIONS', 'tensions'], ['PRACTICE', 'practice']]
+    sections.forEach(([label, key]) => {
+      const t = sectionText(key)
+      if (t) { lines.push('', `── ${label} ──`, t) }
+    })
+    navigator.clipboard.writeText(lines.join('\n'))
   }
 
   const savePNG = () => {
     let dataUrl = null
-    if (mode === '2d') {
+    if (viewMode === '2d') {
       const c = canvasRef.current
       if (!c) return
       dataUrl = c.toDataURL('image/png')
@@ -303,7 +363,12 @@ export default function App() {
     }
     if (!dataUrl) return
     const link = document.createElement('a')
-    link.download = `numeris-${chips.join('-')}-${mode}.png`
+    const tag = readingMode === 'profile' && computedProfile
+      ? computedProfile.inputs.name.split(/\s+/).join('-').toLowerCase()
+      : readingMode === 'compatibility' && computedProfile && computedProfileB
+      ? `${computedProfile.inputs.name.split(/\s+/)[0]}-${computedProfileB.inputs.name.split(/\s+/)[0]}`.toLowerCase()
+      : sigilNumbers.join('-')
+    link.download = `numeris-${tag}-${viewMode}.png`
     link.href = dataUrl
     link.click()
   }
@@ -313,7 +378,7 @@ export default function App() {
 
   // 2D canvas loop
   useEffect(() => {
-    if (!reading || !pattern || mode !== '2d') {
+    if (!reading || !pattern || viewMode !== '2d' || sigilNumbers.length === 0) {
       if (animRef.current) cancelAnimationFrame(animRef.current)
       return
     }
@@ -321,15 +386,11 @@ export default function App() {
     if (!canvas) return
     const dpr = Math.min(window.devicePixelRatio || 1, 2)
     const size = 520
-    canvas.width = size * dpr
-    canvas.height = size * dpr
-    canvas.style.width = `${size}px`
-    canvas.style.height = `${size}px`
+    canvas.width = size * dpr; canvas.height = size * dpr
+    canvas.style.width = `${size}px`; canvas.style.height = `${size}px`
     const ctx = canvas.getContext('2d')
     ctx.scale(dpr, dpr)
-    const cx = size / 2
-    const cy = size / 2
-    const R = size * 0.4
+    const cx = size / 2, cy = size / 2, R = size * 0.4
     const { c1, c2, ca } = palette
     const symmetry = Math.max(3, Math.min(12, Math.floor(reading.symmetry || 6)))
     const layers = Math.max(3, Math.min(9, Math.floor(reading.layers || 5)))
@@ -338,20 +399,39 @@ export default function App() {
 
     const draw = () => {
       ctx.clearRect(0, 0, size, size)
-      ctx.save()
-      ctx.translate(cx, cy)
-      ctx.rotate(rotationRef.current)
-      renderer(ctx, R, symmetry, layers, c1, c2, ca, chips, phi)
+      ctx.save(); ctx.translate(cx, cy); ctx.rotate(rotationRef.current)
+      renderer(ctx, R, symmetry, layers, c1, c2, ca, sigilNumbers, phi)
       ctx.restore()
-      inscribeNumbers(ctx, cx, cy, R, chips, c1)
+      inscribeNumbers(ctx, cx, cy, R, sigilNumbers, c1)
       rotationRef.current += 0.0012
       animRef.current = requestAnimationFrame(draw)
     }
     draw()
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current) }
-  }, [reading, pattern, chips, mode, palette])
+  }, [reading, pattern, sigilNumbers, viewMode, palette])
 
   const today = dailyNumber()
+
+  // ─── Render helpers per mode ────────────────────────────────────────
+
+  const renderCoreCard = (key) => {
+    if (!computedProfile) return null
+    const core = computedProfile[key]
+    const meaning = reading?.[key]?.meaning || ''
+    return (
+      <DeepenBlock
+        key={key}
+        section={key}
+        label={CORE_LABELS[key].label}
+        sublabel={`${core.value}${core.isMaster ? ' · master' : ''}${core.karmicDebt ? ' · karmic' : ''}`}
+        baseText={meaning}
+        layers={deepenings[key] || []}
+        loading={deepenLoading[key]}
+        error={deepenErrors[key]}
+        onDeepen={deepenSection}
+      />
+    )
+  }
 
   return (
     <>
@@ -365,40 +445,91 @@ export default function App() {
           <p className="subtitle">Oracle · of · Numbers</p>
         </header>
 
-        <div className="daily" onClick={() => loadPreset([today])} role="button">
+        <div className="daily" onClick={() => { setInputMode('numbers'); loadPreset([today]) }} role="button">
           <span className="daily-label">Today's Number</span>
           <span className="daily-value">{today}</span>
         </div>
 
-        <section className="zone">
-          <p className="section-label">Offer · Your · Numbers</p>
-          <div className="chip-input" onClick={() => inputRef.current?.focus()}>
-            {chips.map((n, i) => (
-              <span key={i} className="chip">
-                {n}
-                <button onClick={() => setChips((c) => c.filter((_, j) => j !== i))} aria-label="remove">×</button>
-              </span>
-            ))}
-            <input
-              ref={inputRef}
-              className="chip-field"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={onKey}
-              onBlur={() => { if (draft.trim()) { addChip(draft); setDraft('') } }}
-              placeholder={chips.length === 0 ? 'type a number, press space…' : ''}
-              inputMode="decimal"
-            />
-          </div>
-          <div className="presets">
-            {presets.map((p) => (
-              <button key={p.label} className="preset" onClick={() => loadPreset(p.value())}>
-                {p.label}
-              </button>
-            ))}
-          </div>
+        {/* Input-mode tabs */}
+        <div className="mode-tabs">
+          {['numbers', 'profile', 'compatibility'].map((m) => (
+            <button
+              key={m}
+              className={`mode-tab ${inputMode === m ? 'active' : ''}`}
+              onClick={() => { setInputMode(m); clearReading() }}
+            >
+              {m === 'numbers' ? 'Numbers' : m === 'profile' ? 'Your Profile' : 'Compatibility'}
+            </button>
+          ))}
+        </div>
 
-          <button className="read-btn" onClick={receiveReading} disabled={loading || chips.length === 0}>
+        <section className="zone">
+          {inputMode === 'numbers' && (
+            <>
+              <p className="section-label">Offer · Your · Numbers</p>
+              <div className="chip-input" onClick={() => inputRef.current?.focus()}>
+                {chips.map((n, i) => (
+                  <span key={i} className="chip">
+                    {n}
+                    <button onClick={() => setChips((c) => c.filter((_, j) => j !== i))} aria-label="remove">×</button>
+                  </span>
+                ))}
+                <input
+                  ref={inputRef}
+                  className="chip-field"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  onKeyDown={onKey}
+                  onBlur={() => { if (draft.trim()) { addChip(draft); setDraft('') } }}
+                  placeholder={chips.length === 0 ? 'type a number, press space…' : ''}
+                  inputMode="decimal"
+                />
+              </div>
+              <div className="presets">
+                {presets.map((p) => (
+                  <button key={p.label} className="preset" onClick={() => loadPreset(p.value())}>{p.label}</button>
+                ))}
+              </div>
+            </>
+          )}
+
+          {inputMode === 'profile' && (
+            <>
+              <p className="section-label">Name · Birth · Date</p>
+              <ProfileInput
+                value={profileA}
+                onChange={setProfileA}
+                system={system}
+                onSystemChange={setSystem}
+              />
+              <ProfileExplainer />
+            </>
+          )}
+
+          {inputMode === 'compatibility' && (
+            <>
+              <p className="section-label">Two · Profiles</p>
+              <div className="compat-inputs">
+                <ProfileInput value={profileA} onChange={setProfileA} label="Person A" system={system} />
+                <ProfileInput value={profileB} onChange={setProfileB} label="Person B" system={system} onSystemChange={setSystem} />
+              </div>
+              {previewCompat && (
+                <CompatibilityMeter score={previewCompat.score} axes={previewCompat.axes} />
+              )}
+              <ProfileExplainer />
+            </>
+          )}
+
+          <button
+            className="read-btn"
+            onClick={receiveReading}
+            disabled={
+              loading ||
+              (inputMode === 'numbers' && chips.length === 0) ||
+              (inputMode === 'profile' && !previewA) ||
+              (inputMode === 'compatibility' && (!previewA || !previewB))
+            }
+          >
             {loading ? 'Listening…' : 'Receive Reading'}
           </button>
         </section>
@@ -415,9 +546,20 @@ export default function App() {
         {reading && (
           <div className="reading">
             <div className="reading-head">
-              <div className="reading-numbers">{chips.join(' · ')}</div>
+              {readingMode === 'numbers' && (
+                <div className="reading-numbers">{sigilNumbers.join(' · ')}</div>
+              )}
+              {readingMode === 'profile' && computedProfile && (
+                <div className="reading-numbers">{computedProfile.inputs.name} · {computedProfile.inputs.birthdate}</div>
+              )}
+              {readingMode === 'compatibility' && computedProfile && computedProfileB && (
+                <div className="reading-numbers">{computedProfile.inputs.name} · {computedProfileB.inputs.name}</div>
+              )}
               <h2 className="reading-archetype">{reading.archetype}</h2>
               <div className="energy-badge">{energyKey}</div>
+              {readingMode === 'compatibility' && computedCompat && (
+                <CompatibilityMeter score={computedCompat.score} axes={computedCompat.axes} />
+              )}
             </div>
 
             <DeepenBlock
@@ -431,80 +573,70 @@ export default function App() {
               onDeepen={deepenSection}
             />
 
-            <div className="grid">
-              <DeepenBlock
-                section="math"
-                label="Mathematics"
-                baseText={reading.math}
-                layers={deepenings.math || []}
-                loading={deepenLoading.math}
-                error={deepenErrors.math}
-                onDeepen={deepenSection}
-              />
-              <DeepenBlock
-                section="numerology"
-                label="Numerology"
-                baseText={reading.numerology}
-                layers={deepenings.numerology || []}
-                loading={deepenLoading.numerology}
-                error={deepenErrors.numerology}
-                onDeepen={deepenSection}
-              />
-              <DeepenBlock
-                section="history"
-                label="History"
-                baseText={reading.history}
-                layers={deepenings.history || []}
-                loading={deepenLoading.history}
-                error={deepenErrors.history}
-                onDeepen={deepenSection}
-              />
-              <DeepenBlock
-                section="pattern"
-                label="Pattern"
-                baseText={reading.pattern}
-                layers={deepenings.pattern || []}
-                loading={deepenLoading.pattern}
-                error={deepenErrors.pattern}
-                onDeepen={deepenSection}
-              />
-            </div>
+            {/* Body per mode */}
+            {readingMode === 'numbers' && (
+              <div className="grid">
+                <DeepenBlock section="math" label="Mathematics" baseText={reading.math} layers={deepenings.math || []} loading={deepenLoading.math} error={deepenErrors.math} onDeepen={deepenSection} />
+                <DeepenBlock section="numerology" label="Numerology" baseText={reading.numerology} layers={deepenings.numerology || []} loading={deepenLoading.numerology} error={deepenErrors.numerology} onDeepen={deepenSection} />
+                <DeepenBlock section="history" label="History" baseText={reading.history} layers={deepenings.history || []} loading={deepenLoading.history} error={deepenErrors.history} onDeepen={deepenSection} />
+                <DeepenBlock section="pattern" label="Pattern" baseText={reading.pattern} layers={deepenings.pattern || []} loading={deepenLoading.pattern} error={deepenErrors.pattern} onDeepen={deepenSection} />
+              </div>
+            )}
 
-            <div className="affirmation">
-              <div className="affirmation-label">Affirmation</div>
-              <p className="affirmation-text">"{reading.affirmation}"</p>
-            </div>
+            {readingMode === 'profile' && (
+              <div className="core-grid">
+                {CORE_KEYS.map(renderCoreCard)}
+              </div>
+            )}
 
+            {readingMode === 'compatibility' && (
+              <>
+                <div className="grid">
+                  <DeepenBlock section="lifePath" label="Life Path" sublabel={`${computedProfile.lifePath.value} · ${computedProfileB.lifePath.value}`} baseText={reading.lifePath?.meaning || ''} layers={deepenings.lifePath || []} loading={deepenLoading.lifePath} error={deepenErrors.lifePath} onDeepen={deepenSection} />
+                  <DeepenBlock section="expression" label="Expression" sublabel={`${computedProfile.expression.value} · ${computedProfileB.expression.value}`} baseText={reading.expression?.meaning || ''} layers={deepenings.expression || []} loading={deepenLoading.expression} error={deepenErrors.expression} onDeepen={deepenSection} />
+                  <DeepenBlock section="soulUrge" label="Soul Urge" sublabel={`${computedProfile.soulUrge.value} · ${computedProfileB.soulUrge.value}`} baseText={reading.soulUrge?.meaning || ''} layers={deepenings.soulUrge || []} loading={deepenLoading.soulUrge} error={deepenErrors.soulUrge} onDeepen={deepenSection} />
+                </div>
+                <div className="grid">
+                  <DeepenBlock section="strengths" label="Strengths" baseText={reading.strengths} layers={deepenings.strengths || []} loading={deepenLoading.strengths} error={deepenErrors.strengths} onDeepen={deepenSection} />
+                  <DeepenBlock section="tensions" label="Tensions" baseText={reading.tensions} layers={deepenings.tensions || []} loading={deepenLoading.tensions} error={deepenErrors.tensions} onDeepen={deepenSection} />
+                </div>
+                <DeepenBlock section="practice" label="Practice" className="practice-block card" baseText={reading.practice} layers={deepenings.practice || []} loading={deepenLoading.practice} error={deepenErrors.practice} onDeepen={deepenSection} />
+              </>
+            )}
+
+            {/* Affirmation for single-profile / numbers */}
+            {reading.affirmation && (
+              <div className="affirmation">
+                <div className="affirmation-label">Affirmation</div>
+                <p className="affirmation-text">"{reading.affirmation}"</p>
+              </div>
+            )}
+            {reading.verdict && (
+              <div className="affirmation">
+                <div className="affirmation-label">Verdict</div>
+                <p className="affirmation-text">"{reading.verdict}"</p>
+              </div>
+            )}
+
+            {/* Visual section */}
             <div className="visual">
               <div className="visual-head">
                 <h3 className="visual-title">A geometry for these numbers</h3>
                 <div className="mode-toggle">
-                  <button
-                    className={`mode-btn ${mode === '2d' ? 'active' : ''}`}
-                    onClick={() => setMode('2d')}
-                  >2D</button>
-                  <button
-                    className={`mode-btn ${mode === '3d' ? 'active' : ''}`}
-                    onClick={() => setMode('3d')}
-                  >3D</button>
+                  <button className={`mode-btn ${viewMode === '2d' ? 'active' : ''}`} onClick={() => setViewMode('2d')}>2D</button>
+                  <button className={`mode-btn ${viewMode === '3d' ? 'active' : ''}`} onClick={() => setViewMode('3d')}>3D</button>
                 </div>
               </div>
 
-              {pattern ? (
+              {pattern && sigilNumbers.length > 0 ? (
                 <>
                   <div className="tabs">
                     {PATTERNS.map((p) => (
-                      <button
-                        key={p}
-                        className={`tab ${pattern === p ? 'active' : ''}`}
-                        onClick={() => setPattern(p)}
-                      >
-                        {p}
-                      </button>
+                      <button key={p} className={`tab ${pattern === p ? 'active' : ''}`} onClick={() => setPattern(p)}>{p}</button>
                     ))}
                   </div>
                   <div className="canvas-wrap">
-                    {mode === '2d' ? (
+                    {viewMode === '2d' ? (
                       <canvas ref={canvasRef} className="sigil" />
                     ) : (
                       <Suspense fallback={<div className="three-loading">loading dimensional renderer…</div>}>
@@ -512,23 +644,21 @@ export default function App() {
                           ref={sigil3dRef}
                           pattern={pattern}
                           reading={reading}
-                          numbers={chips}
+                          numbers={sigilNumbers}
                           palette={palette}
                           size={520}
                         />
                       </Suspense>
                     )}
                   </div>
-                  {mode === '3d' && (
+                  {viewMode === '3d' && (
                     <p className="hint">drag to orbit · releases into slow rotation</p>
                   )}
                 </>
               ) : (
                 <div className="canvas-wrap">
                   <div className="sigil-placeholder">
-                    <button className="generate-btn" onClick={() => setPattern('mandala')}>
-                      Generate Sigil
-                    </button>
+                    <button className="generate-btn" onClick={() => setPattern('mandala')}>Generate Sigil</button>
                   </div>
                 </div>
               )}
@@ -537,7 +667,7 @@ export default function App() {
                 <button className="action" onClick={savePNG} disabled={!pattern}>Save ↓</button>
                 <button className="action" onClick={copyReading}>Copy Reading</button>
                 <button className="action" onClick={receiveReading}>Read Again</button>
-                <button className="action danger" onClick={reset}>New Numbers</button>
+                <button className="action danger" onClick={reset}>New Reading</button>
               </div>
             </div>
           </div>

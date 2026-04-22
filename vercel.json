@@ -3,11 +3,9 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "functions": {
-    "api/oracle.js": {
-      "maxDuration": 30
-    },
-    "api/deepen.js": {
-      "maxDuration": 30
-    }
+    "api/oracle.js": { "maxDuration": 30 },
+    "api/deepen.js": { "maxDuration": 30 },
+    "api/profile.js": { "maxDuration": 30 },
+    "api/compatibility.js": { "maxDuration": 30 }
   }
 }
