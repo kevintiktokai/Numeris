@@ -572,32 +572,3 @@ canvas.sigil {
   text-align: center;
 }
 
-.api-key-zone {
-  margin-top: 14px;
-  padding: 14px;
-  border: 1px solid var(--line-soft);
-  background: var(--bg-soft);
-}
-
-.api-key-zone input {
-  width: 100%;
-  padding: 10px;
-  background: transparent;
-  border: 1px solid var(--line);
-  color: var(--ink);
-  font-family: 'Space Mono', monospace;
-  font-size: 12px;
-  letter-spacing: 0.1em;
-}
-
-.api-key-zone input:focus { outline: none; border-color: var(--gold-soft); }
-
-.api-key-zone small {
-  display: block;
-  margin-top: 8px;
-  font-family: 'Space Mono', monospace;
-  font-size: 9px;
-  letter-spacing: 0.2em;
-  color: var(--ink-faint);
-  text-transform: uppercase;
-}

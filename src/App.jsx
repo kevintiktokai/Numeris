@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
 // ───────────────────────────────────────────────────────────────────────
 // Constants
@@ -308,55 +308,26 @@ const inscribeNumbers = (ctx, cx, cy, R, numbers, color) => {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// OpenAI API
+// Oracle API (server-side proxy → OpenAI)
 // ───────────────────────────────────────────────────────────────────────
 
-const SYSTEM_PROMPT = `You are Numeris, an oracle of numbers. You speak in poetic, mystical, measured prose. You interpret numbers as living symbols — through mathematics, numerology, history, and sacred geometry. Always respond with a single JSON object matching the requested shape exactly.`
-
-const buildPrompt = (numbers) => `The seeker has presented these numbers: ${numbers.join(', ')}.
-
-Return ONLY a JSON object with this exact shape:
-
-{
-  "archetype": "two-or-three-word evocative title",
-  "energy": "one of: Expansion, Dissolution, Mastery, Chaos, Harmony, Transformation, Mystery",
-  "narrative": "2-3 sentences of poetic, mystical reading interpreting the numbers together",
-  "math": "1-2 sentences about a striking mathematical property of these numbers",
-  "numerology": "1-2 sentences about numerological/symbolic meaning",
-  "history": "1-2 sentences about historical or cultural significance",
-  "pattern": "1 sentence describing the geometric pattern these numbers form",
-  "affirmation": "a short, present-tense affirmation (under 14 words)",
-  "symmetry": integer 3-12 for dominant geometric symmetry,
-  "layers": integer 3-9 for layer count,
-  "phi_ratio": float 0.5-2.0 for how strongly the golden ratio resonates
-}`
-
-const callOracle = async (apiKey, numbers) => {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+const callOracle = async (numbers) => {
+  const res = await fetch('/api/oracle', {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      authorization: `Bearer ${apiKey}`
-    },
-    body: JSON.stringify({
-      model: 'gpt-4o',
-      temperature: 1,
-      response_format: { type: 'json_object' },
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: buildPrompt(numbers) }
-      ]
-    })
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ numbers })
   })
   if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
+    let detail = ''
+    try {
+      const body = await res.json()
+      detail = body?.error || body?.detail || ''
+    } catch {
+      detail = await res.text()
+    }
+    throw new Error(detail ? `${res.status}: ${detail}` : `Request failed (${res.status})`)
   }
-  const data = await res.json()
-  const raw = data?.choices?.[0]?.message?.content || ''
-  const match = raw.match(/\{[\s\S]*\}/)
-  if (!match) throw new Error('No JSON in response')
-  return JSON.parse(match[0])
+  return res.json()
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -410,7 +381,6 @@ const HeaderSigil = () => (
 // ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('numeris-openai-key') || '')
   const [chips, setChips] = useState([])
   const [draft, setDraft] = useState('')
   const [reading, setReading] = useState(null)
@@ -421,10 +391,6 @@ export default function App() {
   const canvasRef = useRef(null)
   const rotationRef = useRef(0)
   const animRef = useRef(null)
-
-  useEffect(() => {
-    if (apiKey) localStorage.setItem('numeris-openai-key', apiKey)
-  }, [apiKey])
 
   const addChip = (raw) => {
     const cleaned = raw.trim().replace(/[^0-9.\-]/g, '')
@@ -465,17 +431,13 @@ export default function App() {
   ]
 
   const receiveReading = async () => {
-    if (!apiKey) {
-      setError('Please enter your OpenAI API key first.')
-      return
-    }
     if (chips.length === 0) return
     setLoading(true)
     setError(null)
     setReading(null)
     setPattern(null)
     try {
-      const result = await callOracle(apiKey, chips)
+      const result = await callOracle(chips)
       setReading(result)
       setPattern('mandala')
     } catch (e) {
@@ -600,18 +562,6 @@ export default function App() {
               </button>
             ))}
           </div>
-
-          {!apiKey && (
-            <div className="api-key-zone">
-              <input
-                type="password"
-                placeholder="paste your openai api key (sk-…)"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-              />
-              <small>stored only in your browser · never sent anywhere but openai</small>
-            </div>
-          )}
 
           <button
             className="read-btn"
