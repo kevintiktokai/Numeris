@@ -308,12 +308,14 @@ const inscribeNumbers = (ctx, cx, cy, R, numbers, color) => {
 }
 
 // ───────────────────────────────────────────────────────────────────────
-// Claude API
+// OpenAI API
 // ───────────────────────────────────────────────────────────────────────
 
-const buildPrompt = (numbers) => `You are Numeris, an oracle of numbers. The seeker has presented these numbers: ${numbers.join(', ')}.
+const SYSTEM_PROMPT = `You are Numeris, an oracle of numbers. You speak in poetic, mystical, measured prose. You interpret numbers as living symbols — through mathematics, numerology, history, and sacred geometry. Always respond with a single JSON object matching the requested shape exactly.`
 
-Provide a mystical, poetic reading. Respond with ONLY a JSON object (no preamble, no code fences) with this exact shape:
+const buildPrompt = (numbers) => `The seeker has presented these numbers: ${numbers.join(', ')}.
+
+Return ONLY a JSON object with this exact shape:
 
 {
   "archetype": "two-or-three-word evocative title",
@@ -324,24 +326,26 @@ Provide a mystical, poetic reading. Respond with ONLY a JSON object (no preamble
   "history": "1-2 sentences about historical or cultural significance",
   "pattern": "1 sentence describing the geometric pattern these numbers form",
   "affirmation": "a short, present-tense affirmation (under 14 words)",
-  "symmetry": <integer 3-12 representing the dominant geometric symmetry>,
-  "layers": <integer 3-9 for layer count>,
-  "phi_ratio": <float 0.5-2.0 representing how strongly the golden ratio resonates>
+  "symmetry": integer 3-12 for dominant geometric symmetry,
+  "layers": integer 3-9 for layer count,
+  "phi_ratio": float 0.5-2.0 for how strongly the golden ratio resonates
 }`
 
-const callClaude = async (apiKey, numbers) => {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+const callOracle = async (apiKey, numbers) => {
+  const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'anthropic-dangerous-direct-browser-access': 'true'
+      authorization: `Bearer ${apiKey}`
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 1024,
-      messages: [{ role: 'user', content: buildPrompt(numbers) }]
+      model: 'gpt-4o',
+      temperature: 1,
+      response_format: { type: 'json_object' },
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user', content: buildPrompt(numbers) }
+      ]
     })
   })
   if (!res.ok) {
@@ -349,7 +353,7 @@ const callClaude = async (apiKey, numbers) => {
     throw new Error(`API ${res.status}: ${text.slice(0, 200)}`)
   }
   const data = await res.json()
-  const raw = data?.content?.[0]?.text || ''
+  const raw = data?.choices?.[0]?.message?.content || ''
   const match = raw.match(/\{[\s\S]*\}/)
   if (!match) throw new Error('No JSON in response')
   return JSON.parse(match[0])
@@ -406,7 +410,7 @@ const HeaderSigil = () => (
 // ───────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const [apiKey, setApiKey] = useState(() => localStorage.getItem('numeris-key') || '')
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem('numeris-openai-key') || '')
   const [chips, setChips] = useState([])
   const [draft, setDraft] = useState('')
   const [reading, setReading] = useState(null)
@@ -419,7 +423,7 @@ export default function App() {
   const animRef = useRef(null)
 
   useEffect(() => {
-    if (apiKey) localStorage.setItem('numeris-key', apiKey)
+    if (apiKey) localStorage.setItem('numeris-openai-key', apiKey)
   }, [apiKey])
 
   const addChip = (raw) => {
@@ -462,7 +466,7 @@ export default function App() {
 
   const receiveReading = async () => {
     if (!apiKey) {
-      setError('Please enter your Anthropic API key first.')
+      setError('Please enter your OpenAI API key first.')
       return
     }
     if (chips.length === 0) return
@@ -471,7 +475,7 @@ export default function App() {
     setReading(null)
     setPattern(null)
     try {
-      const result = await callClaude(apiKey, chips)
+      const result = await callOracle(apiKey, chips)
       setReading(result)
       setPattern('mandala')
     } catch (e) {
@@ -601,11 +605,11 @@ export default function App() {
             <div className="api-key-zone">
               <input
                 type="password"
-                placeholder="paste your anthropic api key (sk-ant-…)"
+                placeholder="paste your openai api key (sk-…)"
                 value={apiKey}
                 onChange={(e) => setApiKey(e.target.value)}
               />
-              <small>stored only in your browser · never sent anywhere but anthropic</small>
+              <small>stored only in your browser · never sent anywhere but openai</small>
             </div>
           )}
 
