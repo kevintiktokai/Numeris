@@ -5,6 +5,9 @@
   "functions": {
     "api/oracle.js": {
       "maxDuration": 30
+    },
+    "api/deepen.js": {
+      "maxDuration": 30
     }
   }
 }
