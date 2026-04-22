@@ -173,51 +173,126 @@ export const computeProfile = ({ name, birthdate, system = 'pythagorean', curren
 
 // ───────────────────────────────────────────────────────────────────────
 // Compatibility
-// Traditional compatibility axes: Life Path, Expression, Soul Urge.
-// Score uses cyclic distance on 1–9 (master numbers reduced for scoring).
+// Grounded in mainstream Pythagorean tradition (Decoz / Millman / Goodwin
+// consensus). The 9×9 matrix encodes each pair's traditional dynamic —
+// not a modular heuristic. Axes compared: Life Path, Expression, Soul
+// Urge, Birthday. Master numbers are tracked and given intensity bonuses.
 // ───────────────────────────────────────────────────────────────────────
 
-// Classical Pythagorean compatibility groupings (condensed tradition):
-// Naturally harmonious triads: 1-5-7, 2-4-8, 3-6-9
-// 1 also resonates with 3, 9. 5 with 1, 7. Etc.
-const HARMONIC_GROUPS = [
-  new Set([1, 5, 7]),
-  new Set([2, 4, 8]),
-  new Set([3, 6, 9])
-]
+// Character capsules for each single-digit number, used in narrative
+// pairing descriptions and passed to the oracle for grounded interpretation.
+export const NUMBER_CHARACTER = {
+  1: 'the leader',
+  2: 'the partner',
+  3: 'the creative',
+  4: 'the builder',
+  5: 'the freedom-seeker',
+  6: 'the nurturer',
+  7: 'the seeker',
+  8: 'the authority',
+  9: 'the humanitarian'
+}
 
-const toSingleDigit = (n) => {
+// Symmetric 9×9 compatibility matrix. Values 0–1.
+// Rationale (diagonals): identical numbers share vibration but also
+// amplify the number's shadow (two 1s both want to lead, two 8s both
+// want to command). So same-number is rarely a perfect 1.0.
+const COMPATIBILITY_MATRIX = {
+  1: { 1: 0.50, 2: 0.55, 3: 0.85, 4: 0.40, 5: 0.85, 6: 0.80, 7: 0.55, 8: 0.40, 9: 0.85 },
+  2: { 1: 0.55, 2: 0.90, 3: 0.60, 4: 0.85, 5: 0.35, 6: 0.90, 7: 0.55, 8: 0.85, 9: 0.80 },
+  3: { 1: 0.85, 2: 0.60, 3: 0.80, 4: 0.35, 5: 0.85, 6: 0.85, 7: 0.50, 8: 0.55, 9: 0.85 },
+  4: { 1: 0.40, 2: 0.85, 3: 0.35, 4: 0.85, 5: 0.30, 6: 0.85, 7: 0.75, 8: 0.85, 9: 0.55 },
+  5: { 1: 0.85, 2: 0.35, 3: 0.85, 4: 0.30, 5: 0.70, 6: 0.40, 7: 0.80, 8: 0.50, 9: 0.85 },
+  6: { 1: 0.80, 2: 0.90, 3: 0.85, 4: 0.85, 5: 0.40, 6: 0.85, 7: 0.50, 8: 0.75, 9: 0.90 },
+  7: { 1: 0.55, 2: 0.55, 3: 0.50, 4: 0.75, 5: 0.80, 6: 0.50, 7: 0.85, 8: 0.40, 9: 0.60 },
+  8: { 1: 0.40, 2: 0.85, 3: 0.55, 4: 0.85, 5: 0.50, 6: 0.75, 7: 0.40, 8: 0.50, 9: 0.55 },
+  9: { 1: 0.85, 2: 0.80, 3: 0.85, 4: 0.55, 5: 0.85, 6: 0.90, 7: 0.60, 8: 0.55, 9: 0.85 }
+}
+
+const labelFor = (h) => {
+  if (h >= 0.85) return 'highly compatible'
+  if (h >= 0.75) return 'compatible'
+  if (h >= 0.55) return 'neutral'
+  if (h >= 0.40) return 'challenging'
+  return 'very challenging'
+}
+
+// Reduce a number to its 1–9 "matrix root", flagging master numbers
+// (11, 22, 33) separately so they can be scored with their intensity bonus.
+const toMatrixRoot = (n) => {
+  if (n === 11) return { root: 2, master: 11 }
+  if (n === 22) return { root: 4, master: 22 }
+  if (n === 33) return { root: 6, master: 33 }
   let x = n
-  while (x > 9) x = sumDigits(x)
-  return x
+  while (x > 9) {
+    let s = 0
+    while (x > 0) { s += x % 10; x = Math.floor(x / 10) }
+    x = s
+  }
+  return { root: x, master: null }
 }
 
-const pairHarmony = (a, b) => {
-  const ra = toSingleDigit(a)
-  const rb = toSingleDigit(b)
-  if (ra === rb) return 1.0
-  for (const g of HARMONIC_GROUPS) {
-    if (g.has(ra) && g.has(rb)) return 0.85
+// Master-number intensity bonus:
+//   master + its root (11↔2, 22↔4, 33↔6): +0.05, "shared master current"
+//   master × master:                      +0.05, "compounded master intensity"
+const masterBonus = (a, b) => {
+  if (!a.master && !b.master) return { bonus: 0, note: null }
+  const pairs = [[11, 2], [22, 4], [33, 6]]
+  for (const [m, r] of pairs) {
+    if ((a.master === m && !b.master && b.root === r) ||
+        (b.master === m && !a.master && a.root === r)) {
+      return { bonus: 0.05, note: 'shared master current' }
+    }
   }
-  // soft neighbors: 1-2, 2-3, etc. get a modest score
-  const diff = Math.min(Math.abs(ra - rb), 9 - Math.abs(ra - rb))
-  return Math.max(0.25, 1 - diff / 5) * 0.7
+  if (a.master && b.master) return { bonus: 0.05, note: 'compounded master intensity' }
+  // One master, one non-root single digit: modest intensity note, no bonus
+  return { bonus: 0, note: 'master intensity carried by one partner' }
 }
+
+// Score one axis between two raw numbers (may be master).
+// Returns: { a, b, rootA, rootB, master, harmony, label, note, characters }
+const scoreAxis = (rawA, rawB) => {
+  const A = toMatrixRoot(rawA)
+  const B = toMatrixRoot(rawB)
+  let base = COMPATIBILITY_MATRIX[A.root]?.[B.root] ?? 0.5
+  const { bonus, note } = masterBonus(A, B)
+  const harmony = Math.max(0, Math.min(1, base + bonus))
+  return {
+    a: rawA,
+    b: rawB,
+    rootA: A.root,
+    rootB: B.root,
+    masterA: A.master,
+    masterB: B.master,
+    harmony,
+    verdict: labelFor(harmony),
+    note,
+    characters: `${NUMBER_CHARACTER[A.root]} × ${NUMBER_CHARACTER[B.root]}`
+  }
+}
+
+// Weighted overall: Life Path 0.50, Expression 0.25, Soul Urge 0.15, Birthday 0.10.
+const AXIS_WEIGHTS = { lifePath: 0.50, expression: 0.25, soulUrge: 0.15, birthday: 0.10 }
 
 export const computeCompatibility = (profileA, profileB) => {
-  const axes = [
-    { key: 'lifePath', label: 'Life Path', a: profileA.lifePath.value, b: profileB.lifePath.value },
+  const axisDefs = [
+    { key: 'lifePath',   label: 'Life Path',   a: profileA.lifePath.value,   b: profileB.lifePath.value },
     { key: 'expression', label: 'Expression', a: profileA.expression.value, b: profileB.expression.value },
-    { key: 'soulUrge', label: 'Soul Urge', a: profileA.soulUrge.value, b: profileB.soulUrge.value }
-  ].map((ax) => ({ ...ax, harmony: pairHarmony(ax.a, ax.b) }))
+    { key: 'soulUrge',   label: 'Soul Urge',  a: profileA.soulUrge.value,   b: profileB.soulUrge.value },
+    { key: 'birthday',   label: 'Birthday',   a: profileA.birthday.value,   b: profileB.birthday.value }
+  ]
 
-  // Weighted: Life Path 0.5, Expression 0.3, Soul Urge 0.2
-  const weighted = axes[0].harmony * 0.5 + axes[1].harmony * 0.3 + axes[2].harmony * 0.2
+  const axes = axisDefs.map((ax) => ({ ...ax, ...scoreAxis(ax.a, ax.b) }))
+
+  const weighted = axes.reduce((sum, ax) => sum + ax.harmony * AXIS_WEIGHTS[ax.key], 0)
   const score = Math.round(weighted * 100)
 
   const mergedVector = [...profileA.vector, ...profileB.vector]
 
-  return { axes, score, mergedVector }
+  // Surface master-number intensity if any axis involves one
+  const masterIntensity = axes.some((ax) => ax.masterA || ax.masterB)
+
+  return { axes, score, mergedVector, masterIntensity, weights: AXIS_WEIGHTS }
 }
 
 // ───────────────────────────────────────────────────────────────────────

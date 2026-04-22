@@ -28,7 +28,7 @@ const MAX_DEPTH = 3
 const DEEPEN_SECTIONS = {
   numbers: ['narrative', 'math', 'numerology', 'history', 'pattern'],
   profile: ['narrative', ...CORE_KEYS],
-  compatibility: ['narrative', 'lifePath', 'expression', 'soulUrge', 'strengths', 'tensions', 'practice']
+  compatibility: ['narrative', 'lifePath', 'expression', 'soulUrge', 'birthday', 'strengths', 'tensions', 'practice']
 }
 
 // ───────────────────────────────────────────────────────────────────────
@@ -148,21 +148,31 @@ const DeepenBlock = ({ section, baseText, className = 'card', label, sublabel, l
 // Compatibility meter
 // ───────────────────────────────────────────────────────────────────────
 
-const CompatibilityMeter = ({ score, axes }) => (
+const CompatibilityMeter = ({ score, axes, masterIntensity }) => (
   <div className="compat-meter">
     <div className="compat-score">
       <div className="compat-score-value">{score}</div>
       <div className="compat-score-label">harmony</div>
+      {masterIntensity && <div className="master-intensity">master intensity</div>}
     </div>
     <div className="compat-axes">
       {axes.map((ax) => (
         <div key={ax.key} className="compat-axis">
           <div className="compat-axis-label">
-            <span>{ax.label}</span>
-            <span className="compat-axis-numbers">{ax.a} · {ax.b}</span>
+            <span>
+              {ax.label}
+              {(ax.masterA || ax.masterB) && <em className="master-axis-tag"> ✦</em>}
+            </span>
+            <span className="compat-axis-numbers">
+              {ax.a}{ax.masterA ? '*' : ''} · {ax.b}{ax.masterB ? '*' : ''}
+            </span>
           </div>
           <div className="compat-axis-bar">
             <div className="compat-axis-fill" style={{ width: `${Math.round(ax.harmony * 100)}%` }} />
+          </div>
+          <div className="compat-axis-verdict">
+            {ax.characters ? `${ax.characters} · ` : ''}
+            <span className={`verdict-${(ax.verdict || '').replace(/ /g, '-')}`}>{ax.verdict}</span>
           </div>
         </div>
       ))}
@@ -514,7 +524,7 @@ export default function App() {
                 <ProfileInput value={profileB} onChange={setProfileB} label="Person B" system={system} onSystemChange={setSystem} />
               </div>
               {previewCompat && (
-                <CompatibilityMeter score={previewCompat.score} axes={previewCompat.axes} />
+                <CompatibilityMeter score={previewCompat.score} axes={previewCompat.axes} masterIntensity={previewCompat.masterIntensity} />
               )}
               <ProfileExplainer />
             </>
@@ -558,7 +568,7 @@ export default function App() {
               <h2 className="reading-archetype">{reading.archetype}</h2>
               <div className="energy-badge">{energyKey}</div>
               {readingMode === 'compatibility' && computedCompat && (
-                <CompatibilityMeter score={computedCompat.score} axes={computedCompat.axes} />
+                <CompatibilityMeter score={computedCompat.score} axes={computedCompat.axes} masterIntensity={computedCompat.masterIntensity} />
               )}
             </div>
 
@@ -595,6 +605,7 @@ export default function App() {
                   <DeepenBlock section="lifePath" label="Life Path" sublabel={`${computedProfile.lifePath.value} · ${computedProfileB.lifePath.value}`} baseText={reading.lifePath?.meaning || ''} layers={deepenings.lifePath || []} loading={deepenLoading.lifePath} error={deepenErrors.lifePath} onDeepen={deepenSection} />
                   <DeepenBlock section="expression" label="Expression" sublabel={`${computedProfile.expression.value} · ${computedProfileB.expression.value}`} baseText={reading.expression?.meaning || ''} layers={deepenings.expression || []} loading={deepenLoading.expression} error={deepenErrors.expression} onDeepen={deepenSection} />
                   <DeepenBlock section="soulUrge" label="Soul Urge" sublabel={`${computedProfile.soulUrge.value} · ${computedProfileB.soulUrge.value}`} baseText={reading.soulUrge?.meaning || ''} layers={deepenings.soulUrge || []} loading={deepenLoading.soulUrge} error={deepenErrors.soulUrge} onDeepen={deepenSection} />
+                  <DeepenBlock section="birthday" label="Birthday" sublabel={`${computedProfile.birthday.value} · ${computedProfileB.birthday.value}`} baseText={reading.birthday?.meaning || ''} layers={deepenings.birthday || []} loading={deepenLoading.birthday} error={deepenErrors.birthday} onDeepen={deepenSection} />
                 </div>
                 <div className="grid">
                   <DeepenBlock section="strengths" label="Strengths" baseText={reading.strengths} layers={deepenings.strengths || []} loading={deepenLoading.strengths} error={deepenErrors.strengths} onDeepen={deepenSection} />

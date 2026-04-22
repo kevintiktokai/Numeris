@@ -849,6 +849,40 @@ body {
 
 .compat-axis-numbers { color: var(--gold); }
 
+.compat-axis-verdict {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 13px;
+  color: var(--ink-faint);
+  font-style: italic;
+  margin-top: 4px;
+  letter-spacing: 0.02em;
+}
+
+.verdict-highly-compatible { color: #6ec8a9; }
+.verdict-compatible        { color: #8ec86e; }
+.verdict-neutral           { color: var(--gold); }
+.verdict-challenging       { color: #c8a96e; opacity: 0.9; }
+.verdict-very-challenging  { color: var(--danger); }
+
+.master-axis-tag {
+  color: var(--gold);
+  font-style: normal;
+  font-size: 11px;
+  margin-left: 4px;
+}
+
+.master-intensity {
+  margin-top: 8px;
+  font-family: 'Space Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 0.3em;
+  color: var(--gold);
+  text-transform: uppercase;
+  border: 1px solid var(--gold-soft);
+  padding: 3px 6px;
+  display: inline-block;
+}
+
 .compat-axis-bar {
   height: 3px;
   background: var(--line-soft);
