@@ -1,7 +1,9 @@
 import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
 import { RENDERERS_2D, inscribeNumbers } from './sigil2d.js'
 import { computeProfile, computeCompatibility, CORE_KEYS, CORE_LABELS } from './numerology.js'
+import { computeAllTraditions, traditionsSigilVector } from './traditions/index.js'
 import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
+import TraditionDeck from './TraditionDeck.jsx'
 
 const Sigil3D = lazy(() => import('./Sigil3D.jsx'))
 
@@ -271,13 +273,28 @@ export default function App() {
     return computeCompatibility(previewA, previewB)
   }, [previewA, previewB])
 
-  // Numbers array used for the sigil, derived from whatever the active reading is
+  // Tradition signatures (client-side pure math). Computed whenever we
+  // have a resolved profile so the deck appears instantly with the reading.
+  const traditionSignatures = useMemo(() => {
+    if (readingMode !== 'profile' || !computedProfile) return null
+    return computeAllTraditions({
+      birthdate: computedProfile.inputs.birthdate,
+      name: computedProfile.inputs.name
+    })
+  }, [readingMode, computedProfile])
+
+  // Numbers array used for the sigil, derived from whatever the active reading is.
+  // In profile mode, core numerology vector + tradition key numbers get merged.
   const sigilNumbers = useMemo(() => {
     if (readingMode === 'numbers') return chips
-    if (readingMode === 'profile') return computedProfile?.vector || []
+    if (readingMode === 'profile') {
+      const base = computedProfile?.vector || []
+      const extras = traditionSignatures ? traditionsSigilVector(traditionSignatures) : []
+      return [...base, ...extras].slice(0, 24)
+    }
     if (readingMode === 'compatibility') return computedCompat?.mergedVector || []
     return []
-  }, [readingMode, chips, computedProfile, computedCompat])
+  }, [readingMode, chips, computedProfile, computedCompat, traditionSignatures])
 
   // Input: numbers mode
   const addChip = (raw) => {
@@ -630,9 +647,18 @@ export default function App() {
             )}
 
             {readingMode === 'profile' && (
-              <div className="core-grid">
-                {CORE_KEYS.map(renderCoreCard)}
-              </div>
+              <>
+                <div className="core-grid">
+                  {CORE_KEYS.map(renderCoreCard)}
+                </div>
+                {traditionSignatures && computedProfile && (
+                  <TraditionDeck
+                    profile={computedProfile.inputs}
+                    numerology={computedProfile}
+                    signatures={traditionSignatures}
+                  />
+                )}
+              </>
             )}
 
             {readingMode === 'compatibility' && (
