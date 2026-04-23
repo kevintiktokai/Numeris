@@ -1584,3 +1584,239 @@ canvas.sigil {
   border-top: 1px solid var(--line-soft);
   letter-spacing: 0.04em;
 }
+
+/* ─────────────────────────────────────────────────────────────────
+   NowPanel — the temporal dashboard (replaces the old daily bar)
+   ───────────────────────────────────────────────────────────────── */
+
+.now-panel {
+  border: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--tint-1), transparent);
+  margin-bottom: 24px;
+  transition: background 0.4s ease;
+}
+
+.now-compact {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  gap: 16px;
+  cursor: pointer;
+  transition: background 0.25s;
+  flex-wrap: wrap;
+}
+
+.now-compact:hover { background: var(--tint-1); }
+
+.now-compact-main {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.now-compact-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.4em;
+  color: var(--gold);
+  text-transform: uppercase;
+}
+
+.now-compact-date {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-style: italic;
+  color: var(--ink);
+  letter-spacing: 0.02em;
+}
+
+.now-compact-signals {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.now-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--line-soft);
+  background: var(--bg-soft);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--ink);
+  text-transform: uppercase;
+}
+
+.now-chip-glyph {
+  color: var(--gold);
+  font-size: 14px;
+  line-height: 1;
+}
+
+.now-chip.daily-chip {
+  cursor: pointer;
+  border: 1px solid var(--gold-soft);
+  color: var(--gold);
+  transition: background 0.25s, letter-spacing 0.25s;
+}
+.now-chip.daily-chip:hover { background: var(--tint-2); letter-spacing: 0.2em; }
+
+.now-toggle {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  color: var(--gold-soft);
+  margin-left: 4px;
+}
+
+.now-expanded {
+  padding: 20px 22px 26px;
+  border-top: 1px solid var(--line-soft);
+  animation: reveal 0.5s ease-out;
+}
+
+.now-lede {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 0 0 18px;
+  text-align: center;
+  line-height: 1.6;
+}
+
+.now-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1px;
+  background: var(--line-soft);
+  border: 1px solid var(--line-soft);
+}
+
+.now-card {
+  background: var(--bg-card);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: background 0.25s;
+}
+
+.now-card.clickable {
+  cursor: pointer;
+}
+
+.now-card.clickable:hover {
+  background: var(--tint-2);
+}
+
+.now-card-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.3em;
+  color: var(--gold-soft);
+  text-transform: uppercase;
+}
+
+.now-card-main {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  color: var(--gold);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  line-height: 1.2;
+}
+
+.now-card-sub {
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.now-card-essence {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  font-style: italic;
+  color: var(--ink);
+  line-height: 1.45;
+  margin-top: 4px;
+}
+
+.now-personal {
+  margin-top: 24px;
+  padding: 16px 18px;
+  border: 1px solid var(--gold-soft);
+  background: var(--tint-1);
+  animation: reveal 0.6s ease-out;
+}
+
+.now-personal-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+
+.now-personal-grid {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.now-personal-pill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--line-soft);
+  flex: 1 1 auto;
+  min-width: 160px;
+}
+
+.now-personal-pill-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.3em;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+}
+
+.now-personal-pill-value {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  color: var(--gold);
+  font-weight: 500;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* Save-reading action states */
+.action.saved {
+  border-color: var(--gold);
+  color: var(--gold);
+  background: var(--tint-2);
+}
+
+.save-hint {
+  margin: 10px auto 0;
+  max-width: 520px;
+  text-align: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+}
+
+.save-hint.save-error { color: var(--danger); }

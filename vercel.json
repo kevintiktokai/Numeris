@@ -8,6 +8,7 @@
     "api/profile.js": { "maxDuration": 30 },
     "api/compatibility.js": { "maxDuration": 30 },
     "api/tradition.js": { "maxDuration": 30 },
-    "api/confluence.js": { "maxDuration": 45 }
+    "api/confluence.js": { "maxDuration": 45 },
+    "api/save.js": { "maxDuration": 15 }
   }
 }

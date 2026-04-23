@@ -4,6 +4,7 @@ import { computeProfile, computeCompatibility, CORE_KEYS, CORE_LABELS } from './
 import { computeAllTraditions, traditionsSigilVector } from './traditions/index.js'
 import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
 import TraditionDeck from './TraditionDeck.jsx'
+import NowPanel from './NowPanel.jsx'
 
 const Sigil3D = lazy(() => import('./Sigil3D.jsx'))
 
@@ -248,6 +249,10 @@ export default function App() {
   const [pattern, setPattern] = useState(null)
   const [viewMode, setViewMode] = useState('2d')
 
+  // Save state
+  const [saveStatus, setSaveStatus] = useState(null)  // null | 'saving' | 'saved' | 'unavailable' | 'error'
+  const [saveError, setSaveError] = useState(null)
+
   // Deepen state
   const [deepenings, setDeepenings] = useState({})
   const [deepenLoading, setDeepenLoading] = useState({})
@@ -330,6 +335,7 @@ export default function App() {
     setComputedProfile(null); setComputedProfileB(null); setComputedCompat(null)
     setError(null)
     setDeepenings({}); setDeepenErrors({}); setDeepenLoading({})
+    setSaveStatus(null); setSaveError(null)
   }
 
   const reset = () => {
@@ -414,6 +420,42 @@ export default function App() {
     navigator.clipboard.writeText(lines.join('\n'))
   }
 
+  const saveReading = async () => {
+    if (!reading) return
+    setSaveStatus('saving'); setSaveError(null)
+    try {
+      const body = {
+        kind: readingMode,
+        payload: reading,
+        pattern,
+        palette,
+        inputs: readingMode === 'numbers'
+          ? { numbers: chips }
+          : readingMode === 'profile'
+          ? { profile: computedProfile?.inputs, vector: computedProfile?.vector }
+          : { profileA: computedProfile?.inputs, profileB: computedProfileB?.inputs, compatibility: computedCompat },
+        profile: readingMode === 'profile' ? computedProfile?.inputs : null
+      }
+      const res = await fetch('/api/save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (res.status === 503) {
+        setSaveStatus('unavailable')
+        return
+      }
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}))
+        throw new Error(errBody.error || errBody.detail || `Save failed (${res.status})`)
+      }
+      setSaveStatus('saved')
+    } catch (e) {
+      setSaveStatus('error')
+      setSaveError(e.message)
+    }
+  }
+
   const savePNG = () => {
     let dataUrl = null
     if (viewMode === '2d') {
@@ -472,8 +514,6 @@ export default function App() {
     return () => { if (animRef.current) cancelAnimationFrame(animRef.current) }
   }, [reading, pattern, sigilNumbers, viewMode, palette])
 
-  const today = dailyNumber()
-
   // ─── Render helpers per mode ────────────────────────────────────────
 
   const renderCoreCard = (key) => {
@@ -508,10 +548,11 @@ export default function App() {
           <p className="subtitle">Oracle · of · Numbers</p>
         </header>
 
-        <div className="daily" onClick={() => { setInputMode('numbers'); loadPreset([today]) }} role="button">
-          <span className="daily-label">Today's Number</span>
-          <span className="daily-value">{today}</span>
-        </div>
+        <NowPanel
+          personalProfile={computedProfile}
+          onLoadDailyNumber={(n) => { setInputMode('numbers'); loadPreset([n]) }}
+        />
+
 
         {/* Input-mode tabs */}
         <div className="mode-tabs">
@@ -737,11 +778,29 @@ export default function App() {
               )}
 
               <div className="actions">
-                <button className="action" onClick={savePNG} disabled={!pattern}>Save ↓</button>
+                <button className="action" onClick={savePNG} disabled={!pattern}>Save PNG ↓</button>
                 <button className="action" onClick={copyReading}>Copy Reading</button>
+                <button
+                  className={`action ${saveStatus === 'saved' ? 'saved' : ''}`}
+                  onClick={saveReading}
+                  disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                  title={saveStatus === 'unavailable' ? 'Persistence not configured on the server' : 'Save this reading'}
+                >
+                  {saveStatus === 'saving' && 'saving…'}
+                  {saveStatus === 'saved' && '★ saved'}
+                  {saveStatus === 'unavailable' && '★ Save (offline)'}
+                  {saveStatus === 'error' && '★ retry save'}
+                  {!saveStatus && '★ Save reading'}
+                </button>
                 <button className="action" onClick={receiveReading}>Read Again</button>
                 <button className="action danger" onClick={reset}>New Reading</button>
               </div>
+              {saveStatus === 'unavailable' && (
+                <p className="save-hint">Saving requires SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY in Vercel env vars.</p>
+              )}
+              {saveStatus === 'error' && saveError && (
+                <p className="save-hint save-error">Save failed: {saveError}</p>
+              )}
             </div>
           </div>
         )}
