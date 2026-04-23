@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
+import { Analytics } from '@vercel/analytics/react'
 import { RENDERERS_2D, inscribeNumbers } from './sigil2d.js'
 import { computeProfile, computeCompatibility, CORE_KEYS, CORE_LABELS } from './numerology.js'
 import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
@@ -445,6 +446,7 @@ export default function App() {
 
   return (
     <>
+      <Analytics />
       <div className="grain" />
       <div className="vignette" />
       <div className="shell">
