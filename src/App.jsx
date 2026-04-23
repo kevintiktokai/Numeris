@@ -24,6 +24,12 @@ const PALETTES = {
 const PATTERNS = ['mandala', 'interference', 'constellation', 'spiral']
 const MAX_DEPTH = 3
 
+const THEMES = [
+  { key: 'premium', label: 'Premium' },
+  { key: 'earth',   label: 'Earth' },
+  { key: 'light',   label: 'Light' }
+]
+
 // Which sections are deepenable per reading mode
 const DEEPEN_SECTIONS = {
   numbers: ['narrative', 'math', 'numerology', 'history', 'pattern'],
@@ -83,7 +89,7 @@ const callDeepen = (payload) => postJSON('/api/deepen', payload)
 
 const HeaderSigil = () => (
   <svg className="sigil-head" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
-    <g fill="none" stroke="#c8a96e" strokeWidth="0.6">
+    <g fill="none" stroke="currentColor" strokeWidth="0.6">
       <circle cx="50" cy="50" r="46" opacity="0.6" />
       <circle cx="50" cy="50" r="34" opacity="0.4" />
       <circle cx="50" cy="50" r="20" opacity="0.5" />
@@ -106,7 +112,7 @@ const HeaderSigil = () => (
           const a = (i / 6) * Math.PI * 2 - Math.PI / 2 + Math.PI / 6
           return `${50 + Math.cos(a) * 28},${50 + Math.sin(a) * 28}`
         }).join(' ')} />
-      <circle cx="50" cy="50" r="3" fill="#c8a96e" stroke="none" />
+      <circle cx="50" cy="50" r="3" fill="currentColor" stroke="none" />
     </g>
   </svg>
 )
@@ -184,7 +190,36 @@ const CompatibilityMeter = ({ score, axes, masterIntensity }) => (
 // Main App
 // ───────────────────────────────────────────────────────────────────────
 
+const ThemeToggle = ({ theme, onChange }) => (
+  <div className="theme-toggle" role="group" aria-label="Theme">
+    {THEMES.map((t) => (
+      <button
+        key={t.key}
+        data-theme={t.key}
+        className={`theme-btn ${theme === t.key ? 'active' : ''}`}
+        onClick={() => onChange(t.key)}
+        aria-pressed={theme === t.key}
+        title={t.label}
+      >
+        <span className="theme-btn-orb" aria-hidden="true" />
+        {t.label}
+      </button>
+    ))}
+  </div>
+)
+
 export default function App() {
+  // Theme: 'premium' | 'earth' | 'light'
+  const [theme, setTheme] = useState(() => {
+    if (typeof window === 'undefined') return 'premium'
+    return localStorage.getItem('numeris-theme') || 'premium'
+  })
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('numeris-theme', theme)
+  }, [theme])
+
   // Input mode: 'numbers' | 'profile' | 'compatibility'
   const [inputMode, setInputMode] = useState('numbers')
 
@@ -447,6 +482,7 @@ export default function App() {
     <>
       <div className="grain" />
       <div className="vignette" />
+      <ThemeToggle theme={theme} onChange={setTheme} />
       <div className="shell">
 
         <header className="header">
