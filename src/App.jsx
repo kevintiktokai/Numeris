@@ -6,6 +6,10 @@ import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
 import TraditionDeck from './TraditionDeck.jsx'
 import NowPanel from './NowPanel.jsx'
 
+const NatalChart = lazy(() => import('./NatalChart.jsx'))
+// natal.js (astronomy-engine) is dynamic-imported on demand so the heavy
+// ephemeris code doesn't ship on first page load.
+
 const Sigil3D = lazy(() => import('./Sigil3D.jsx'))
 
 // ───────────────────────────────────────────────────────────────────────
@@ -264,15 +268,27 @@ export default function App() {
   const rotationRef = useRef(0)
   const animRef = useRef(null)
 
-  // Live-computed profile previews for the input form
-  const previewA = useMemo(() => {
-    if (!profileA.name || !/^\d{4}-\d{2}-\d{2}$/.test(profileA.birthdate)) return null
-    try { return computeProfile({ name: profileA.name, birthdate: profileA.birthdate, system }) } catch { return null }
-  }, [profileA, system])
-  const previewB = useMemo(() => {
-    if (!profileB.name || !/^\d{4}-\d{2}-\d{2}$/.test(profileB.birthdate)) return null
-    try { return computeProfile({ name: profileB.name, birthdate: profileB.birthdate, system }) } catch { return null }
-  }, [profileB, system])
+  // Live-computed profile previews for the input form.
+  // We merge the natal-chart inputs into `inputs` so downstream code can
+  // pick them up uniformly.
+  const buildPreview = (src) => {
+    if (!src.name || !/^\d{4}-\d{2}-\d{2}$/.test(src.birthdate)) return null
+    try {
+      const computed = computeProfile({ name: src.name, birthdate: src.birthdate, system })
+      return {
+        ...computed,
+        inputs: {
+          ...computed.inputs,
+          birthtime: src.birthtime || null,
+          lat: src.lat !== undefined && src.lat !== '' ? src.lat : null,
+          lon: src.lon !== undefined && src.lon !== '' ? src.lon : null,
+          tz:  src.tz  !== undefined && src.tz  !== '' ? src.tz  : null
+        }
+      }
+    } catch { return null }
+  }
+  const previewA = useMemo(() => buildPreview(profileA), [profileA, system])
+  const previewB = useMemo(() => buildPreview(profileB), [profileB, system])
   const previewCompat = useMemo(() => {
     if (!previewA || !previewB) return null
     return computeCompatibility(previewA, previewB)
@@ -287,6 +303,52 @@ export default function App() {
       name: computedProfile.inputs.name
     })
   }, [readingMode, computedProfile])
+
+  // Natal chart — dynamic-imported on demand (astronomy-engine is heavy).
+  const [natalChart, setNatalChart] = useState(null)
+  const [natalReading, setNatalReading] = useState(null)
+  const [natalLoading, setNatalLoading] = useState(false)
+  const [natalError, setNatalError] = useState(null)
+
+  useEffect(() => {
+    if (readingMode !== 'profile' || !computedProfile) { setNatalChart(null); return }
+    const { inputs } = computedProfile
+    const ready = inputs.birthtime && inputs.lat != null && inputs.lon != null && inputs.tz != null
+    if (!ready) { setNatalChart(null); return }
+    let cancelled = false
+    import('./natal.js').then(({ natal }) => {
+      if (cancelled) return
+      try {
+        const result = natal.compute({
+          birthdate: inputs.birthdate,
+          birthtime: inputs.birthtime,
+          lat: Number(inputs.lat),
+          lon: Number(inputs.lon),
+          tz: Number(inputs.tz)
+        })
+        setNatalChart(result)
+      } catch {
+        setNatalChart(null)
+      }
+    })
+    return () => { cancelled = true }
+  }, [readingMode, computedProfile])
+
+  const readNatalChart = async () => {
+    if (!natalChart) return
+    setNatalLoading(true); setNatalError(null)
+    try {
+      const result = await postJSON('/api/natal', {
+        profile: computedProfile.inputs,
+        chart: natalChart.chart
+      })
+      setNatalReading(result)
+    } catch (e) {
+      setNatalError(e.message)
+    } finally {
+      setNatalLoading(false)
+    }
+  }
 
   // Numbers array used for the sigil, derived from whatever the active reading is.
   // In profile mode, core numerology vector + tradition key numbers get merged.
@@ -336,6 +398,7 @@ export default function App() {
     setError(null)
     setDeepenings({}); setDeepenErrors({}); setDeepenLoading({})
     setSaveStatus(null); setSaveError(null)
+    setNatalReading(null); setNatalError(null); setNatalLoading(false)
   }
 
   const reset = () => {
@@ -698,6 +761,65 @@ export default function App() {
                     numerology={computedProfile}
                     signatures={traditionSignatures}
                   />
+                )}
+                {natalChart && (
+                  <div className="natal-section">
+                    <div className="natal-section-head">
+                      <p className="section-label">✦ The · Natal · Chart</p>
+                      <p className="natal-section-sub">{natalChart.signature}</p>
+                    </div>
+                    <Suspense fallback={<div className="three-loading">casting the chart…</div>}>
+                      <NatalChart chart={natalChart.chart} />
+                    </Suspense>
+                    {!natalReading && (
+                      <div className="natal-read-row">
+                        <button
+                          className="confluence-btn"
+                          onClick={readNatalChart}
+                          disabled={natalLoading}
+                        >
+                          {natalLoading ? 'reading the heavens…' : '✦ Read the Chart ✦'}
+                        </button>
+                      </div>
+                    )}
+                    {natalError && <div className="error">{natalError}</div>}
+                    {natalReading && (
+                      <div className="natal-reading">
+                        <div className="natal-archetype">{natalReading.archetype}</div>
+                        <div className="narrative"><p>{natalReading.chartEssence}</p></div>
+                        <div className="grid">
+                          <div className="card">
+                            <p className="card-title">Sun · {natalChart.chart.planets.find((p) => p.key === 'Sun')?.name}</p>
+                            <p className="card-body">{natalReading.sun?.meaning}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Moon · {natalChart.chart.planets.find((p) => p.key === 'Moon')?.name}</p>
+                            <p className="card-body">{natalReading.moon?.meaning}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Rising · {natalChart.chart.ascendant?.name}</p>
+                            <p className="card-body">{natalReading.rising?.meaning}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Key Aspects</p>
+                            <p className="card-body">{natalReading.keyAspects}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Life Theme</p>
+                            <p className="card-body">{natalReading.lifeTheme}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Shadow Work</p>
+                            <p className="card-body">{natalReading.shadow}</p>
+                          </div>
+                        </div>
+                        <div className="affirmation">
+                          <div className="affirmation-label">The Chart Speaks</div>
+                          <p className="affirmation-text">"{natalReading.affirmation}"</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
               </>
             )}

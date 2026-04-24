@@ -1820,3 +1820,225 @@ canvas.sigil {
 }
 
 .save-hint.save-error { color: var(--danger); }
+
+/* ─────────────────────────────────────────────────────────────────
+   Natal chart — Tier-2 (birth time + location unlocks the full chart)
+   ───────────────────────────────────────────────────────────────── */
+
+.natal-toggle {
+  display: inline-block;
+  margin-top: 14px;
+  background: none;
+  border: none;
+  color: var(--gold-soft);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: color 0.25s, letter-spacing 0.25s;
+}
+.natal-toggle:hover { color: var(--gold); letter-spacing: 0.4em; }
+
+.natal-fields {
+  margin-top: 14px;
+  padding: 16px 18px;
+  border: 1px solid var(--line-soft);
+  background: var(--tint-1);
+  animation: reveal 0.4s ease-out;
+}
+
+.natal-fields-hint {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 16px;
+  font-style: italic;
+  color: var(--ink-soft);
+  margin: 0 0 14px;
+  line-height: 1.5;
+}
+
+.natal-fields-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+@media (max-width: 560px) { .natal-fields-grid { grid-template-columns: 1fr; } }
+
+.field-inline {
+  display: flex;
+  gap: 6px;
+}
+
+.field-inline .field-input { flex: 1; }
+
+.field-inline-btn {
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--gold-soft);
+  font-family: 'Space Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.25s;
+}
+.field-inline-btn:hover { color: var(--gold); border-color: var(--gold-soft); }
+
+.natal-fields-tip {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 14px;
+  color: var(--ink-faint);
+  font-style: italic;
+  margin: 12px 0 0;
+  line-height: 1.5;
+}
+.natal-fields-tip code {
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+  background: var(--bg-soft);
+  padding: 1px 5px;
+  color: var(--gold);
+  border: 1px solid var(--line-soft);
+}
+
+/* Natal section within the reading */
+.natal-section {
+  margin-top: 48px;
+  padding-top: 32px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.natal-section-head {
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.natal-section-sub {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-style: italic;
+  color: var(--gold);
+  margin: 8px 0 0;
+  letter-spacing: 0.04em;
+}
+
+.natal-wheel-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+  padding: 20px 0;
+}
+
+.natal-wheel {
+  width: 520px;
+  max-width: 100%;
+  height: auto;
+  background: radial-gradient(circle at center, var(--sigil-bg-inner) 0%, var(--sigil-bg-outer) 90%);
+  border: 1px solid var(--line);
+}
+
+.natal-legend {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  width: 100%;
+  max-width: 620px;
+  font-family: 'Space Mono', monospace;
+  font-size: 12px;
+}
+
+@media (max-width: 560px) { .natal-legend { grid-template-columns: 1fr; } }
+
+.natal-legend-group {
+  border: 1px solid var(--line-soft);
+  background: var(--bg-soft);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.natal-legend-row {
+  display: grid;
+  grid-template-columns: 24px 70px 90px 60px 28px;
+  gap: 8px;
+  align-items: center;
+  font-size: 12px;
+  letter-spacing: 0.05em;
+  color: var(--ink);
+}
+
+.natal-legend-glyph {
+  color: var(--gold);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  text-align: center;
+}
+.natal-legend-name { color: var(--ink); }
+.natal-legend-placement { color: var(--gold-soft); font-style: italic; font-family: 'Cormorant Garamond', serif; font-size: 14px; }
+.natal-legend-degree { color: var(--ink-soft); font-size: 11px; }
+.natal-legend-house { color: var(--ink-faint); font-size: 11px; text-align: right; }
+
+.natal-aspects {
+  margin-top: 20px;
+  width: 100%;
+  max-width: 620px;
+  border: 1px solid var(--line-soft);
+  padding: 14px 16px;
+  background: var(--tint-1);
+}
+
+.natal-aspects-label {
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.natal-aspects-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 6px 16px;
+}
+
+.natal-aspect-row {
+  display: grid;
+  grid-template-columns: 16px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  color: var(--ink);
+  letter-spacing: 0.04em;
+}
+
+.natal-aspect-row > span:first-child { font-size: 14px; }
+.natal-aspect-bodies { color: var(--ink); }
+.natal-aspect-detail { color: var(--ink-faint); font-size: 10px; text-align: right; }
+
+.natal-read-row {
+  text-align: center;
+  margin-top: 28px;
+}
+
+.natal-reading {
+  margin-top: 32px;
+  animation: reveal 0.8s ease-out;
+}
+
+.natal-archetype {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 36px;
+  font-style: italic;
+  color: var(--ink);
+  text-align: center;
+  margin-bottom: 18px;
+  letter-spacing: 0.06em;
+}

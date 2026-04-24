@@ -2,7 +2,8 @@ import { useMemo, useState } from 'react'
 import { computeProfile, CORE_KEYS, CORE_LABELS } from './numerology.js'
 
 const ProfileInput = ({ value, onChange, label, system, onSystemChange }) => {
-  const { name, birthdate } = value
+  const { name, birthdate, birthtime = '', lat = '', lon = '', tz = '' } = value
+  const [showNatalFields, setShowNatalFields] = useState(false)
 
   const profile = useMemo(() => {
     if (!name || name.trim().length < 2 || !/^\d{4}-\d{2}-\d{2}$/.test(birthdate)) return null
@@ -12,6 +13,19 @@ const ProfileInput = ({ value, onChange, label, system, onSystemChange }) => {
       return null
     }
   }, [name, birthdate, system])
+
+  const natalReady = Boolean(
+    birthdate &&
+    /^\d{2}:\d{2}$/.test(birthtime) &&
+    lat !== '' && !isNaN(Number(lat)) &&
+    lon !== '' && !isNaN(Number(lon)) &&
+    tz !== '' && !isNaN(Number(tz))
+  )
+
+  const detectTz = () => {
+    const offsetMin = -new Date().getTimezoneOffset()
+    onChange({ ...value, tz: (offsetMin / 60).toString() })
+  }
 
   return (
     <div className="profile-input">
@@ -51,6 +65,81 @@ const ProfileInput = ({ value, onChange, label, system, onSystemChange }) => {
             onClick={() => onSystemChange('chaldean')}
             type="button"
           >Chaldean</button>
+        </div>
+      )}
+
+      {/* Natal chart fields — optional, collapsed by default */}
+      <button
+        className="natal-toggle"
+        type="button"
+        onClick={() => setShowNatalFields((s) => !s)}
+      >
+        {showNatalFields ? '− hide' : '+ add'} birth time &amp; place {natalReady && !showNatalFields ? '· natal ready' : ''}
+      </button>
+
+      {showNatalFields && (
+        <div className="natal-fields">
+          <p className="natal-fields-hint">
+            Adding birth time + location unlocks your full Western natal chart — Sun, Moon, Rising, all planets in houses, aspects.
+            Without these, the app still runs everything else.
+          </p>
+          <div className="natal-fields-grid">
+            <label className="field">
+              <span className="field-label">birth time (24h)</span>
+              <input
+                className="field-input"
+                type="time"
+                value={birthtime}
+                onChange={(e) => onChange({ ...value, birthtime: e.target.value })}
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">tz offset (hours from UTC)</span>
+              <div className="field-inline">
+                <input
+                  className="field-input"
+                  type="number"
+                  step="0.5"
+                  value={tz}
+                  onChange={(e) => onChange({ ...value, tz: e.target.value })}
+                  placeholder="e.g. -8"
+                />
+                <button
+                  type="button"
+                  className="field-inline-btn"
+                  onClick={detectTz}
+                  title="Use your browser's current timezone offset"
+                >use mine</button>
+              </div>
+            </label>
+          </div>
+          <div className="natal-fields-grid">
+            <label className="field">
+              <span className="field-label">latitude (decimal)</span>
+              <input
+                className="field-input"
+                type="number"
+                step="0.0001"
+                value={lat}
+                onChange={(e) => onChange({ ...value, lat: e.target.value })}
+                placeholder="e.g. 40.7128"
+              />
+            </label>
+            <label className="field">
+              <span className="field-label">longitude (decimal)</span>
+              <input
+                className="field-input"
+                type="number"
+                step="0.0001"
+                value={lon}
+                onChange={(e) => onChange({ ...value, lon: e.target.value })}
+                placeholder="e.g. -74.0060"
+              />
+            </label>
+          </div>
+          <p className="natal-fields-tip">
+            Tip: Google your birth city and copy lat/lon from the URL (decimals like <code>40.7128</code>, <code>-74.0060</code>). Timezone is hours ahead of UTC (negative for the Americas, positive for Europe/Asia).
+          </p>
         </div>
       )}
 
