@@ -5,6 +5,8 @@ import { computeAllTraditions, traditionsSigilVector } from './traditions/index.
 import ProfileInput, { ProfileExplainer } from './ProfileInput.jsx'
 import TraditionDeck from './TraditionDeck.jsx'
 import NowPanel from './NowPanel.jsx'
+import LifeMap from './LifeMap.jsx'
+import { computeLifeMap } from './lifemap.js'
 
 const NatalChart = lazy(() => import('./NatalChart.jsx'))
 // natal.js (astronomy-engine) is dynamic-imported on demand so the heavy
@@ -310,6 +312,32 @@ export default function App() {
   const [natalLoading, setNatalLoading] = useState(false)
   const [natalError, setNatalError] = useState(null)
 
+  // Life Map — temporal cross-tradition view (pure math from birthdate)
+  const lifeMap = useMemo(() => {
+    if (readingMode !== 'profile' || !computedProfile) return null
+    try { return computeLifeMap(computedProfile) } catch { return null }
+  }, [readingMode, computedProfile])
+
+  const [lifeMapReading, setLifeMapReading] = useState(null)
+  const [lifeMapLoading, setLifeMapLoading] = useState(false)
+  const [lifeMapError, setLifeMapError] = useState(null)
+
+  const readLifeMap = async () => {
+    if (!lifeMap) return
+    setLifeMapLoading(true); setLifeMapError(null)
+    try {
+      const result = await postJSON('/api/lifemap', {
+        profile: computedProfile.inputs,
+        map: lifeMap
+      })
+      setLifeMapReading(result)
+    } catch (e) {
+      setLifeMapError(e.message)
+    } finally {
+      setLifeMapLoading(false)
+    }
+  }
+
   useEffect(() => {
     if (readingMode !== 'profile' || !computedProfile) { setNatalChart(null); return }
     const { inputs } = computedProfile
@@ -399,6 +427,7 @@ export default function App() {
     setDeepenings({}); setDeepenErrors({}); setDeepenLoading({})
     setSaveStatus(null); setSaveError(null)
     setNatalReading(null); setNatalError(null); setNatalLoading(false)
+    setLifeMapReading(null); setLifeMapError(null); setLifeMapLoading(false)
   }
 
   const reset = () => {
@@ -761,6 +790,57 @@ export default function App() {
                     numerology={computedProfile}
                     signatures={traditionSignatures}
                   />
+                )}
+                {lifeMap && (
+                  <div className="lifemap-section">
+                    <div className="lifemap-section-head">
+                      <p className="section-label">✦ The · Life · Map</p>
+                      <p className="lifemap-section-sub">
+                        Pinnacles · Challenges · Saturn &amp; Jupiter Returns · the 9-year Personal Year cycle
+                      </p>
+                    </div>
+                    <LifeMap map={lifeMap} />
+                    {!lifeMapReading && (
+                      <div className="natal-read-row">
+                        <button
+                          className="confluence-btn"
+                          onClick={readLifeMap}
+                          disabled={lifeMapLoading}
+                        >
+                          {lifeMapLoading ? 'reading the arc…' : '✦ Read the Life Arc ✦'}
+                        </button>
+                      </div>
+                    )}
+                    {lifeMapError && <div className="error">{lifeMapError}</div>}
+                    {lifeMapReading && (
+                      <div className="lifemap-reading">
+                        <div className="natal-archetype">{lifeMapReading.archetype}</div>
+                        <div className="narrative"><p>{lifeMapReading.lifeArc}</p></div>
+                        <div className="grid">
+                          <div className="card">
+                            <p className="card-title">The Past Chapter</p>
+                            <p className="card-body">{lifeMapReading.pastChapter}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">The Present Chapter</p>
+                            <p className="card-body">{lifeMapReading.presentChapter}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">The Next Threshold</p>
+                            <p className="card-body">{lifeMapReading.nextThreshold}</p>
+                          </div>
+                          <div className="card">
+                            <p className="card-title">Path of Liberation</p>
+                            <p className="card-body">{lifeMapReading.liberationPath}</p>
+                          </div>
+                        </div>
+                        <div className="affirmation">
+                          <div className="affirmation-label">For This Chapter</div>
+                          <p className="affirmation-text">"{lifeMapReading.affirmation}"</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 )}
                 {natalChart && (
                   <div className="natal-section">
